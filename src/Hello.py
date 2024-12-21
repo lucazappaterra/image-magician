@@ -25,7 +25,10 @@ if 'inpainted_image' not in st.session_state:
 
 # Load the Stable Diffusion model
 if 'pipe' not in st.session_state:
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    if not torch.cuda.is_available():
+        device = "mps" if torch.backends.mps.is_available() else "cpu"
+    else:
+        device = "cuda"
 
     st.session_state.pipe = StableDiffusionInpaintPipeline.from_pretrained(
         "lykon/absolute-reality-1.6525-inpainting", #stabilityai/stable-diffusion-2-inpainting
