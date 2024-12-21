@@ -3,5 +3,5 @@ python-dotenv
 pillow
 diffusers
 transformers
-opencv-python
+opencv-python-headless
 torch
