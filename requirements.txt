@@ -5,3 +5,4 @@ diffusers
 transformers
 opencv-python-headless
 torch
+accelerate
