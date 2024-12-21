@@ -6,7 +6,7 @@ authors = ["Luca Zappaterra <luca.zappaterra@me.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.12"
 streamlit = "^1.41.1"
 python-dotenv = "^1.0.1"
 pillow = "^11.0.0"
