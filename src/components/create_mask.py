@@ -11,7 +11,7 @@ def create_mask(input_image):
 
     # --- Faces detection ---
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=15)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=20)
 
     # --- Inverse mask creation ---
     mask = np.ones(input_image.shape[:2], np.uint8) * 255  # Maschera bianca (tutto da mantenere)

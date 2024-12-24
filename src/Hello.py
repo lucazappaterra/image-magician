@@ -3,11 +3,10 @@ from dotenv import load_dotenv
 from diffusers import StableDiffusionInpaintPipeline
 import torch
 from PIL import Image
-import io
 import cv2
 import numpy as np
 from components.create_mask import create_mask
-from components.prompts import prompt_inpainting, negative_prompt_inpainting
+from components.prompts import positive_prompts, negative_prompt_inpainting
 
 load_dotenv()
 
@@ -22,20 +21,23 @@ if 'show_uploader' not in st.session_state:
     st.session_state.show_uploader = False
 if 'inpainted_image' not in st.session_state:
     st.session_state.inpainted_image = None
+if 'generator' not in st.session_state:
+    st.session_state.generator = None
+if 'device' not in st.session_state:
+    st.session_state.device = None
 
 # Load the Stable Diffusion model
 if 'pipe' not in st.session_state:
     if not torch.cuda.is_available():
-        device = "mps" if torch.backends.mps.is_available() else "cpu"
+        st.session_state.device = "mps" if torch.backends.mps.is_available() else "cpu"
     else:
-        device = "cuda"
-
+        st.session_state.device = "cuda"
     st.session_state.pipe = StableDiffusionInpaintPipeline.from_pretrained(
         "lykon/absolute-reality-1.6525-inpainting", #stabilityai/stable-diffusion-2-inpainting
     #  'Lykon/dreamshaper-8-inpainting',
         torch_dtype=torch.float16, 
         variant="fp16"
-    ).to(device)
+    ).to(st.session_state.device)
     # st.session_state.pipe.enable_model_cpu_offload()
 
 with st.expander("ℹ️ About"):
@@ -70,44 +72,46 @@ with col2:
             st.session_state.user_photo = uploaded_file
             st.session_state.photo_is_from_camera = False
             st.session_state.show_uploader = False
-            
+
+selected_prompt_key = st.selectbox("Choose a prompt", list(positive_prompts.keys()))
+prompt_inpainting = positive_prompts[selected_prompt_key]
+seed = st.slider("Seed", -1, 1000, -1, 1)
+st.session_state.generator = torch.Generator(device=st.session_state.device).manual_seed(seed)
+
+
 st.write("👇🏻 Scroll down to see the magic happen!") 
-with st.expander("🪄 Magic"):
+
+with st.expander("🪄 Magic", expanded=True):
     if st.session_state.user_photo:
         # st.image(st.session_state.user_photo, caption="Your Image", use_container_width=True)
+        uploaded_image = st.session_state.user_photo
+        image_bytes = uploaded_image.getvalue()
+        img_cv = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), -1)
+        img_cv = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB) # convert to RGB
+
+        mask = create_mask(img_cv)
+
+        init_image = Image.fromarray(img_cv).convert("RGB")
+        original_width, original_height = init_image.size
+        print(f"Original dimensions: {original_width}x{original_height}")
         
-        if st.session_state.inpainted_image is None:
-            # Load the image
-            uploaded_image = st.session_state.user_photo
-            image_bytes = uploaded_image.getvalue()
-            img_cv = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), -1)
-            img_cv = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB) # convert to RGB
+        max_size = (768, 768)
+        init_image.thumbnail(max_size, Image.Resampling.LANCZOS)
+        # init_image.show()
+        down_width, down_height = init_image.size
 
-            mask = create_mask(img_cv)
+        output_width = down_width - (down_width % 8)
+        output_height = down_height - (down_height % 8)
+        print(f"Downscaled to: {output_width}x{output_height}")
 
-            init_image = Image.fromarray(img_cv).convert("RGB")
-            fill = Image.new("RGB", init_image.size, "black")
+        fill = Image.new("RGB", init_image.size, "black")
 
-
-            original_width, original_height = init_image.size
-            print(f"Original dimensions: {original_width}x{original_height}")
-            
-            if st.session_state.photo_is_from_camera:
-                reduce_factor = 1
-            else:
-                reduce_factor = 1.5 if original_width <= 1000 else 2
-            output_height = int(original_height/reduce_factor + 8 - (original_height/reduce_factor) % 8)
-            output_width = int(original_width/reduce_factor + 8 - (original_width/reduce_factor) % 8)
-            print(f"Output dimensions: {output_width}x{output_height}")  
-
-            # Generate the transformed image
+    if st.session_state.inpainted_image is None:
+        
+        # Generate the transformed image
+        if st.button("Generate Image"):
             with st.spinner("Generating image..."):
                 output_filename = "inpainted_image.png"
-                # prompt_inpainting = "Dressed like Santa with a festive background"  # Prompt per l'inpainting dello sfondo
-                # negative_prompt_inpainting = """
-                #     deformity, gore, violence, ugly, disfigured, poor details, deformed hands, 
-                #     deformed face, deformed eyes, deformed ears, deformed legs, deformed background, beard
-                # """
                 inpainted_image = st.session_state.pipe(
                     prompt=prompt_inpainting, 
                     negative_prompt=negative_prompt_inpainting,
@@ -115,14 +119,16 @@ with st.expander("🪄 Magic"):
                     mask_image=mask, 
                     init_image = fill,
                     height=output_height,#960
-                    width=output_width#560
+                    width=output_width,#560
+                    generator=st.session_state.generator
                     # strength=0.99, 
                     # num_inference_steps=4,
                     # guidance_scale=0.5
                 ).images[0]
                 st.session_state.inpainted_image = inpainted_image
                 inpainted_image.save(output_filename)
-                print(f"Immagine inpaintata salvata come: {output_filename}")
+                print(f"Image saved as: {output_filename}")
         
         # Display the transformed image
+    if st.session_state.inpainted_image is not None:
         st.image(st.session_state.inpainted_image, caption="Transformed Image", use_container_width=True)
